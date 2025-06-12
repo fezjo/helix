@@ -49,6 +49,7 @@ helix-lsp = { path = "../helix-lsp" }
 helix-dap = { path = "../helix-dap" }
 helix-vcs = { path = "../helix-vcs" }
 helix-loader = { path = "../helix-loader" }
+helix-parsec = { path = "../helix-parsec" }
 
 anyhow = "1"
 once_cell = "1.21"
@@ -58,7 +59,10 @@ tui = { path = "../helix-tui", package = "helix-tui", default-features = false, 
 termina = { workspace = true, features = ["event-stream"] }
 signal-hook = "0.3"
 tokio-stream = "0.1"
-futures-util = { version = "0.3", features = ["std", "async-await"], default-features = false }
+futures-util = { version = "0.3", features = [
+  "std",
+  "async-await",
+], default-features = false }
 arc-swap = { version = "1.7.1" }
 termini = "1"
 indexmap = "2.11"
