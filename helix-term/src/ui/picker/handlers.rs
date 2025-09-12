@@ -44,7 +44,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> AsyncHook
             timeout
         } else {
             self.trigger = Some(path);
-            Some(Instant::now() + Duration::from_millis(150))
+            Some(Instant::now() + Duration::from_millis(7))
         }
     }
 
@@ -134,13 +134,13 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> DynamicQueryHandler<T, 
     pub(super) fn new(callback: DynQueryCallback<T, D>, duration_ms: Option<u64>) -> Self {
         Self {
             callback: Arc::new(callback),
-            debounce: Duration::from_millis(duration_ms.unwrap_or(100)),
+            debounce: Duration::from_millis(7),
             last_query: "".into(),
             query: None,
         }
     }
 }
-
+ 
 impl<T: 'static + Send + Sync, D: 'static + Send + Sync> AsyncHook for DynamicQueryHandler<T, D> {
     type Event = DynamicQueryChange;
 
