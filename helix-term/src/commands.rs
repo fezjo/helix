@@ -2449,11 +2449,29 @@ fn search_selection_impl(cx: &mut Context, detect_word_boundaries: bool) {
         char_is_word(prev_ch) && !char_is_word(ch)
     }
 
+    let count = cx.count();
     let register = cx.register.unwrap_or('/');
     let (view, doc) = current!(cx.editor);
     let text = doc.text().slice(..);
 
-    let regex = doc
+    // Checks whether there is only one selection with a width of 1
+    let selections = doc.selection(view.id);
+    let primary = selections.primary();
+    let regex = if selections.len() == 1 && primary.len() == 1 {
+        let text = doc.text();
+        let text_slice = text.slice(..);
+        // In this case select the WORD under the cursor
+        let current_word = textobject::textobject_word(
+            text_slice,
+            primary,
+            textobject::TextObject::Inside,
+            count,
+            false,
+        );
+        let text_to_search = current_word.fragment(text_slice).to_string();
+        regex::escape(&text_to_search)
+    } else {
+        doc
         .selection(view.id)
         .iter()
         .map(|selection| {
@@ -2471,8 +2489,8 @@ fn search_selection_impl(cx: &mut Context, detect_word_boundaries: bool) {
         .collect::<HashSet<_>>() // Collect into hashset to deduplicate identical regexes
         .into_iter()
         .collect::<Vec<_>>()
-        .join("|");
-
+        .join("|")
+    };
     let msg = format!("register '{}' set to '{}'", register, &regex);
     match cx.editor.registers.push(register, regex) {
         Ok(_) => {
