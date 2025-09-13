@@ -6851,28 +6851,10 @@ fn jump_to_label(cx: &mut Context, labels: Vec<Range>, behaviour: Movement) {
     if labels.is_empty() {
         return;
     }
-    let alphabet_char = |i| {
-        let mut res = Tendril::new();
-        res.push(alphabet[i]);
-        res
-    };
 
     // Add label for each jump candidate to the View as virtual text.
     let text = doc.text().slice(..);
-    let mut overlays: Vec<_> = labels
-        .iter()
-        .enumerate()
-        .flat_map(|(i, range)| {
-            [
-                Overlay::new(range.from(), alphabet_char(i / alphabet.len())),
-                Overlay::new(
-                    graphemes::next_grapheme_boundary(text, range.from()),
-                    alphabet_char(i % alphabet.len()),
-                ),
-            ]
-        })
-        .collect();
-    overlays.sort_unstable_by_key(|overlay| overlay.char_idx);
+    let overlays = labels_to_overlays(labels.iter().enumerate(), alphabet, text);
     let (view, doc) = current!(cx.editor);
     doc.set_jump_labels(view.id, overlays);
 
@@ -6896,6 +6878,17 @@ fn jump_to_label(cx: &mut Context, labels: Vec<Range>, behaviour: Movement) {
         if outer > labels.len() {
             doc_mut!(cx.editor, &doc).remove_jump_labels(view);
             return;
+        }
+        if let Some(ch) = event.char() {
+            let mut grapheme = Tendril::new();
+            grapheme.push(ch);
+
+            let overlays = labels_to_overlays(
+                labels.iter().enumerate().skip(outer).take(alphabet.len()),
+                alphabet,
+                doc!(cx.editor, &doc).text().slice(..),
+            );
+            doc_mut!(cx.editor, &doc).set_jump_labels(view, overlays);
         }
         cx.on_next_key(move |cx, event| {
             doc_mut!(cx.editor, &doc).remove_jump_labels(view);
@@ -6932,6 +6925,31 @@ fn jump_to_label(cx: &mut Context, labels: Vec<Range>, behaviour: Movement) {
             }
         });
     });
+}
+
+fn labels_to_overlays<'a>(
+    it: impl Iterator<Item = (usize, &'a Range)>,
+    alphabet: &[char],
+    text: RopeSlice,
+) -> Vec<Overlay> {
+    fn alphabet_char(alphabet: &[char], index: usize) -> Tendril {
+        let mut res = Tendril::new();
+        res.push(alphabet[index]);
+        res
+    }
+    let mut overlays: Vec<_> = it
+        .flat_map(|(i, range)| {
+            [
+                Overlay::new(range.from(), alphabet_char(alphabet, i / alphabet.len())),
+                Overlay::new(
+                    graphemes::next_grapheme_boundary(text, range.from()),
+                    alphabet_char(alphabet, i % alphabet.len()),
+                ),
+            ]
+        })
+        .collect();
+    overlays.sort_unstable_by_key(|overlay| overlay.char_idx);
+    overlays
 }
 
 fn jump_to_word(cx: &mut Context, behaviour: Movement) {
