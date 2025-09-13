@@ -1,5 +1,6 @@
 ## Keymap
 
+- [Keymap](#keymap)
 - [Normal mode](#normal-mode)
   - [Movement](#movement)
   - [Changes](#changes)
@@ -163,7 +164,7 @@ Search commands all operate on the `/` register by default. To use a different r
 | `n`   | Select next search match                    | `search_next`        |
 | `N`   | Select previous search match                | `search_prev`        |
 | `*`   | Use current selection as the search pattern, automatically wrapping with `\b` on word boundaries | `search_selection_detect_word_boundaries` |
-| `Alt-*` | Use current selection as the search pattern | `search_selection` |
+| `Alt-*` | Use current selection as the search pattern, if only a single char is selected the current word (miW) is used instead | `search_selection` |
 
 ### Minor modes
 
