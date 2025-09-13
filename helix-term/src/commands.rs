@@ -486,6 +486,8 @@ impl MappableCommand {
         redo, "Redo change",
         earlier, "Move backward in history",
         later, "Move forward in history",
+        undo_selection, "Undo selection",
+        redo_selection, "Redo selection",
         commit_undo_checkpoint, "Commit changes to new checkpoint",
         yank, "Yank selection",
         yank_to_clipboard, "Yank selections to clipboard",
@@ -2471,25 +2473,24 @@ fn search_selection_impl(cx: &mut Context, detect_word_boundaries: bool) {
         let text_to_search = current_word.fragment(text_slice).to_string();
         regex::escape(&text_to_search)
     } else {
-        doc
-        .selection(view.id)
-        .iter()
-        .map(|selection| {
-            let add_boundary_prefix =
-                detect_word_boundaries && is_at_word_start(text, selection.from());
-            let add_boundary_suffix =
-                detect_word_boundaries && is_at_word_end(text, selection.to());
+        doc.selection(view.id)
+            .iter()
+            .map(|selection| {
+                let add_boundary_prefix =
+                    detect_word_boundaries && is_at_word_start(text, selection.from());
+                let add_boundary_suffix =
+                    detect_word_boundaries && is_at_word_end(text, selection.to());
 
-            let prefix = if add_boundary_prefix { "\\b" } else { "" };
-            let suffix = if add_boundary_suffix { "\\b" } else { "" };
+                let prefix = if add_boundary_prefix { "\\b" } else { "" };
+                let suffix = if add_boundary_suffix { "\\b" } else { "" };
 
-            let word = regex::escape(&selection.fragment(text));
-            format!("{}{}{}", prefix, word, suffix)
-        })
-        .collect::<HashSet<_>>() // Collect into hashset to deduplicate identical regexes
-        .into_iter()
-        .collect::<Vec<_>>()
-        .join("|")
+                let word = regex::escape(&selection.fragment(text));
+                format!("{}{}{}", prefix, word, suffix)
+            })
+            .collect::<HashSet<_>>() // Collect into hashset to deduplicate identical regexes
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join("|")
     };
     let msg = format!("register '{}' set to '{}'", register, &regex);
     match cx.editor.registers.push(register, regex) {
@@ -4658,6 +4659,29 @@ fn later(cx: &mut Context) {
 fn commit_undo_checkpoint(cx: &mut Context) {
     let (view, doc) = current!(cx.editor);
     doc.append_changes_to_history(view);
+}
+
+fn undo_selection(cx: &mut Context) {
+    let count = cx.count();
+    let config = cx.editor.config();
+    let (view, doc) = current!(cx.editor);
+    if !doc.undo_selection(view, count) {
+        cx.editor
+            .set_status("Already at oldest selection (since last edit)");
+    }
+    let (view, doc) = current!(cx.editor);
+    view.ensure_cursor_in_view_center(doc, config.scrolloff);
+}
+
+fn redo_selection(cx: &mut Context) {
+    let count = cx.count();
+    let config = cx.editor.config();
+    let (view, doc) = current!(cx.editor);
+    if !doc.redo_selection(view, count) {
+        cx.editor.set_status("Already at newest selection");
+    }
+    let (view, doc) = current!(cx.editor);
+    view.ensure_cursor_in_view_center(doc, config.scrolloff);
 }
 
 // Yank / Paste
