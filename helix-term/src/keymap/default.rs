@@ -150,6 +150,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "U" => redo,
         "A-u" => earlier,
         "A-U" => later,
+        "C-y" => undo_selection,
+        "C-Y" => redo_selection,
 
         "y" => yank,
         // yank_all

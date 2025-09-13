@@ -138,11 +138,18 @@ pub enum DocumentOpenError {
     IoError(#[from] io::Error),
 }
 
+#[derive(Debug)]
+pub struct SelectionHistory {
+    selections: Vec<Selection>,
+    current: usize,
+}
+
 pub struct Document {
     pub(crate) id: DocumentId,
     text: Rope,
     selections: HashMap<ViewId, Selection>,
     view_data: HashMap<ViewId, ViewData>,
+    selections_history: HashMap<ViewId, SelectionHistory>,
     pub active_snippet: Option<ActiveSnippet>,
 
     /// Inlay hints annotations for the document, by view.
@@ -297,6 +304,7 @@ impl fmt::Debug for Document {
             .field("id", &self.id)
             .field("text", &self.text)
             .field("selections", &self.selections)
+            .field("selections_history", &self.selections_history)
             .field("inlay_hints_oudated", &self.inlay_hints_oudated)
             .field("text_annotations", &self.inlay_hints)
             .field("view_data", &self.view_data)
@@ -700,6 +708,7 @@ impl Document {
             has_bom,
             text,
             selections: HashMap::default(),
+            selections_history: HashMap::default(),
             inlay_hints: HashMap::default(),
             inlay_hints_oudated: false,
             view_data: Default::default(),
@@ -1323,8 +1332,35 @@ impl Document {
     /// Select text within the [`Document`].
     pub fn set_selection(&mut self, view_id: ViewId, selection: Selection) {
         // TODO: use a transaction?
-        self.selections
-            .insert(view_id, selection.ensure_invariants(self.text().slice(..)));
+        let selection = selection.ensure_invariants(self.text().slice(..));
+
+        self.selections_history
+            .entry(view_id)
+            .and_modify(|history| {
+                if history.current + 1 < history.selections.len() {
+                    history.selections.truncate(history.current + 1);
+                }
+                history.selections.push(selection.clone());
+                history.current += 1;
+            })
+            .or_insert_with(|| {
+                let mut selections = Vec::new();
+
+                // After doc is modified the history is cleared and therefore doesn't
+                // contain the current selection so it is added here
+                if let Some(s) = self.selections.get(&view_id) {
+                    selections.push(s.clone());
+                }
+                selections.push(selection.clone());
+
+                let current = selections.len() - 1;
+                SelectionHistory {
+                    selections,
+                    current,
+                }
+            });
+
+        self.selections.insert(view_id, selection);
         helix_event::dispatch(SelectionDidChange {
             doc: self,
             view: view_id,
@@ -1367,6 +1403,7 @@ impl Document {
     /// Remove a view's selection and inlay hints from this document.
     pub fn remove_view(&mut self, view_id: ViewId) {
         self.selections.remove(&view_id);
+        self.selections_history.remove(&view_id);
         self.inlay_hints.remove(&view_id);
         self.jump_labels.remove(&view_id);
     }
@@ -1411,6 +1448,8 @@ impl Document {
                 // Ensure all selections across all views still adhere to invariants.
                 .ensure_invariants(self.text.slice(..));
         }
+        // Reset the selection history after any change
+        self.selections_history.clear();
 
         for view_data in self.view_data.values_mut() {
             view_data.view_position.anchor = transaction
@@ -1723,6 +1762,39 @@ impl Document {
 
         // Update jumplist entries in the view.
         view.apply(&transaction, self);
+    }
+
+    pub fn undo_redo_selection_impl(&mut self, view: &mut View, count: usize, undo: bool) -> bool {
+        if let Some(selection_history) = self.selections_history.get_mut(&view.id) {
+            #[allow(clippy::collapsible_else_if)]
+            let (new_idx, success) = if undo {
+                if selection_history.current < count {
+                    (0, false)
+                } else {
+                    (selection_history.current - count, true)
+                }
+            } else {
+                if selection_history.current + count >= selection_history.selections.len() {
+                    (selection_history.selections.len() - 1, false)
+                } else {
+                    (selection_history.current + count, true)
+                }
+            };
+
+            selection_history.current = new_idx;
+            self.selections
+                .insert(view.id, selection_history.selections[new_idx].clone());
+            return success;
+        }
+        false
+    }
+
+    pub fn undo_selection(&mut self, view: &mut View, count: usize) -> bool {
+        self.undo_redo_selection_impl(view, count, true)
+    }
+
+    pub fn redo_selection(&mut self, view: &mut View, count: usize) -> bool {
+        self.undo_redo_selection_impl(view, count, false)
     }
 
     pub fn id(&self) -> DocumentId {
